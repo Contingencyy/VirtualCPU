@@ -4,7 +4,7 @@
 
 enum OpCode : uint8_t
 {
-	OPCODE_MOV_REG_MEM_TO_REG = 0x22,
+	OPCODE_MOV_REG_MEM_TO_FROM_REG = 0x22,
 	OPCODE_MOV_IMMEDIATE_TO_REG = 0x0B
 };
 
@@ -18,6 +18,18 @@ static const char* registers[2][8] =
 		"ax", "cx", "dx", "bx",
 		"sp", "bp", "si", "di"
 	}
+};
+
+static const char* effective_address_calc_table[8] =
+{
+	"bx + si",
+	"bx + di",
+	"bp + si",
+	"bp + di",
+	"si",
+	"di",
+	"bp",
+	"bx",
 };
 
 struct InstructionStream
@@ -50,32 +62,98 @@ uint16_t ReadWordFromStream(InstructionStream* stream)
 	return result;
 }
 
+uint8_t GetBitMask(uint8_t bit_size)
+{
+	return 0xFF >> (8 - bit_size);
+}
+
+bool CheckOpCode(OpCode opcode, uint8_t byte, uint8_t opcode_bit_size)
+{
+	return ((byte >> (8 - opcode_bit_size)) & GetBitMask(opcode_bit_size)) == opcode;
+}
+
+void GetEffectiveAddressCalcString(char* buf, size_t buf_size, uint8_t rm, uint16_t disp)
+{
+	if (disp > 0)
+		sprintf_s(buf, buf_size, "[%s + %d]", effective_address_calc_table[rm], disp);
+	else
+		sprintf_s(buf, buf_size, "[%s]", effective_address_calc_table[rm]);
+}
+
 void Disassemble(InstructionStream* stream)
 {
 	while (stream->inst_at < stream->inst_end)
 	{
 		uint8_t byte0 = ReadByteFromStream(stream);
-		if (((byte0 >> 2) & 0x3F) == OpCode::OPCODE_MOV_REG_MEM_TO_REG)
+
+		if (CheckOpCode(OPCODE_MOV_REG_MEM_TO_FROM_REG, byte0, 6))
 		{
-			uint8_t D = (byte0 >> 1) & 0x1;
-			uint8_t W = (byte0 >> 0) & 0x1;
+			uint8_t D = (byte0 >> 1) & GetBitMask(1);
+			uint8_t W = (byte0 >> 0) & GetBitMask(1);
 
 			uint8_t byte1 = ReadByteFromStream(stream);
-			uint8_t mod = (byte1 >> 6) & 0x3;
-			if (mod != 0x3)
+			uint8_t mod = (byte1 >> 6) & GetBitMask(2);
+
+			uint8_t reg = (byte1 >> 3) & GetBitMask(3);
+			uint8_t rm = (byte1 >> 0) & GetBitMask(3);
+
+			const char* dst_str = 0;
+			const char* src_str = 0;
+
+			if (mod == 0x0)
 			{
-				printf("MOV operator other than register to register is currently not supported\n");
+				if (reg == 0x6)
+				{
+					// 16-bit displacement, special case
+					uint16_t disp_lo_hi = ReadWordFromStream(stream);
+
+					char eff_addr_str[32];
+					GetEffectiveAddressCalcString(eff_addr_str, 32, rm, disp_lo_hi);
+					dst_str = D ? registers[W][reg] : eff_addr_str;
+					src_str = D ? eff_addr_str : registers[W][reg];
+				}
+				else
+				{
+					// No displacement follows
+					char eff_addr_str[32];
+					GetEffectiveAddressCalcString(eff_addr_str, 32, rm, 0);
+					dst_str = D ? registers[W][reg] : eff_addr_str;
+					src_str = D ? eff_addr_str : registers[W][reg];
+				}
+			}
+			else if (mod == 0x1)
+			{
+				// 8-bit displacement follows
+				uint8_t disp_lo = ReadByteFromStream(stream);
+
+				char eff_addr_str[32];
+				GetEffectiveAddressCalcString(eff_addr_str, 32, rm, disp_lo);
+				dst_str = D ? registers[W][reg] : eff_addr_str;
+				src_str = D ? eff_addr_str : registers[W][reg];
+			}
+			else if (mod == 0x2)
+			{
+				// 16-bit displacement follows
+				uint16_t disp_lo_hi = ReadWordFromStream(stream);
+
+				char eff_addr_str[32];
+				GetEffectiveAddressCalcString(eff_addr_str, 32, rm, disp_lo_hi);
+				dst_str = D ? registers[W][reg] : eff_addr_str;
+				src_str = D ? eff_addr_str : registers[W][reg];
+			}
+			else if (mod == 0x3)
+			{
+				// Register to register, no displacement
+				uint8_t dst_reg = D ? reg : rm;
+				uint8_t src_reg = D ? rm : reg;
+
+				dst_str = registers[W][dst_reg];
+				src_str = registers[W][src_reg];
 			}
 
-			uint8_t reg = (byte1 >> 3) & 0x7;
-			uint8_t rm = (byte1 >> 0) & 0x7;
-
-			uint8_t dst_reg = D ? reg : rm;
-			uint8_t src_reg = D ? rm : reg;
-
-			printf("mov %s, %s\n", registers[W][dst_reg], registers[W][src_reg]);
+			printf("mov %s, %s\n", dst_str, src_str);
 		}
-		else if (((byte0 >> 4) & 0xF) == OpCode::OPCODE_MOV_IMMEDIATE_TO_REG)
+		else if (CheckOpCode(OPCODE_MOV_IMMEDIATE_TO_REG, byte0, 4))
 		{
 			uint8_t W = (byte0 >> 3) & 0x1;
 			uint8_t reg = (byte0 >> 0) & 0x7;
