@@ -117,14 +117,14 @@ int main(int num_args, char** args)
 	uint8_t buffer[1024];
 	size_t bytes_read = 0;
 
-	ReadByteFile("ASM/listing_0037_single_register_mov", buffer, sizeof(buffer), &bytes_read);
+	ReadByteFile("../Listings/listing_0037_single_register_mov", buffer, sizeof(buffer), &bytes_read);
 	InstructionStream stream = {};
 	stream.inst_begin = buffer;
 	stream.inst_at = stream.inst_begin;
 	stream.inst_end = stream.inst_begin + bytes_read;
 	Disassemble(&stream);
 
-	ReadByteFile("ASM/listing_0038_many_register_mov", buffer, sizeof(buffer), &bytes_read);
+	ReadByteFile("../Listings/listing_0038_many_register_mov", buffer, sizeof(buffer), &bytes_read);
 	stream = {};
 	stream.inst_begin = buffer;
 	stream.inst_at = stream.inst_begin;
