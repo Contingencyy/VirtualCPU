@@ -24,6 +24,7 @@
     <ProjectGuid>{80059106-3ddc-4203-83e1-faf6ddafb6f4}</ProjectGuid>
     <RootNamespace>VirtualCPU</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>VirtualCPU</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
