@@ -46,10 +46,10 @@ uint8_t ReadByteFromStream(InstructionStream* stream)
 
 void Disassemble(InstructionStream* stream)
 {
-	// Don't really need to bitmask the opcode, since it starts at the very left bit, but whatever
 	while (stream->inst_at < stream->inst_end)
 	{
 		uint8_t byte0 = ReadByteFromStream(stream);
+		// Don't really need to bitmask the opcode, since it starts at the very left bit, but whatever
 		uint8_t opcode = (byte0 >> 2) & OPCODE_BITMASK;
 
 		switch (opcode)
