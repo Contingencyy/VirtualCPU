@@ -2,16 +2,10 @@
 #include <stdlib.h>
 #include <cstdint>
 
-constexpr uint8_t OPCODE_BITMASK = 0x3F;
-constexpr uint8_t D_BITMASK = 0x3;
-constexpr uint8_t W_BITMASK = 0x1;
-constexpr uint8_t MOD_BITMASK = 0x3;
-constexpr uint8_t REG_BITMASK = 0x7;
-constexpr uint8_t RM_BITMASK = 0x7;
-
 enum OpCode : uint8_t
 {
-	OPCODE_MOV = 0x22,
+	OPCODE_MOV_REG_MEM_TO_REG = 0x22,
+	OPCODE_MOV_IMMEDIATE_TO_REG = 0x0B
 };
 
 static const char* registers[2][8] =
@@ -36,9 +30,21 @@ struct InstructionStream
 uint8_t ReadByteFromStream(InstructionStream* stream)
 {
 	uint8_t result = 0;
-	if (stream->inst_at < stream->inst_end)
+	if (stream->inst_at + sizeof(uint8_t) <= stream->inst_end)
 	{
 		result = *(stream->inst_at++);
+	}
+
+	return result;
+}
+
+uint16_t ReadWordFromStream(InstructionStream* stream)
+{
+	uint16_t result = 0;
+	if (stream->inst_at + sizeof(uint16_t) <= stream->inst_end)
+	{
+		result = *((uint16_t*)stream->inst_at);
+		stream->inst_at += sizeof(uint16_t);
 	}
 
 	return result;
@@ -49,35 +55,45 @@ void Disassemble(InstructionStream* stream)
 	while (stream->inst_at < stream->inst_end)
 	{
 		uint8_t byte0 = ReadByteFromStream(stream);
-		// Don't really need to bitmask the opcode, since it starts at the very left bit, but whatever
-		uint8_t opcode = (byte0 >> 2) & OPCODE_BITMASK;
-
-		switch (opcode)
+		if (((byte0 >> 2) & 0x3F) == OpCode::OPCODE_MOV_REG_MEM_TO_REG)
 		{
-		case OpCode::OPCODE_MOV:
-		{
-			uint8_t D = (byte0 >> 1) & D_BITMASK;
-			uint8_t W = (byte0 >> 0) & W_BITMASK;
+			uint8_t D = (byte0 >> 1) & 0x1;
+			uint8_t W = (byte0 >> 0) & 0x1;
 
 			uint8_t byte1 = ReadByteFromStream(stream);
-			uint8_t mod = (byte1 >> 6) & MOD_BITMASK;
+			uint8_t mod = (byte1 >> 6) & 0x3;
 			if (mod != 0x3)
 			{
 				printf("MOV operator other than register to register is currently not supported\n");
 			}
 
-			uint8_t reg = (byte1 >> 3) & REG_BITMASK;
-			uint8_t rm = (byte1 >> 0) & RM_BITMASK;
+			uint8_t reg = (byte1 >> 3) & 0x7;
+			uint8_t rm = (byte1 >> 0) & 0x7;
 
 			uint8_t dst_reg = D ? reg : rm;
 			uint8_t src_reg = D ? rm : reg;
 
 			printf("mov %s, %s\n", registers[W][dst_reg], registers[W][src_reg]);
-		} break;
-		default:
+		}
+		else if (((byte0 >> 4) & 0xF) == OpCode::OPCODE_MOV_IMMEDIATE_TO_REG)
+		{
+			uint8_t W = (byte0 >> 3) & 0x1;
+			uint8_t reg = (byte0 >> 0) & 0x7;
+			
+			if (W == 0)
+			{
+				uint8_t data_byte = ReadByteFromStream(stream);
+				printf("mov %s, %u\n", registers[W][reg], data_byte);
+			}
+			else
+			{
+				uint16_t data_word = ReadWordFromStream(stream);
+				printf("mov %s, %u\n", registers[W][reg], data_word);
+			}
+		}
+		else
 		{
 			printf("Invalid OpCode!\n");
-		} break;
 		}
 	}
 }
@@ -116,20 +132,63 @@ int main(int num_args, char** args)
 {
 	uint8_t buffer[1024];
 	size_t bytes_read = 0;
-
-	ReadByteFile("Listings/listing_0037_single_register_mov", buffer, sizeof(buffer), &bytes_read);
 	InstructionStream stream = {};
-	stream.inst_begin = buffer;
-	stream.inst_at = stream.inst_begin;
-	stream.inst_end = stream.inst_begin + bytes_read;
-	Disassemble(&stream);
 
-	ReadByteFile("Listings/listing_0038_many_register_mov", buffer, sizeof(buffer), &bytes_read);
-	stream = {};
-	stream.inst_begin = buffer;
-	stream.inst_at = stream.inst_begin;
-	stream.inst_end = stream.inst_begin + bytes_read;
-	Disassemble(&stream);
+	// ==========================================================
+	// Listing 37 & 38
+
+#if 0
+	{
+		const char* listing_37 = "Listings/listing_0037_single_register_mov";
+		printf("====================================================\n");
+		printf("Listing %s\n", listing_37);
+		ReadByteFile(listing_37, buffer, sizeof(buffer), &bytes_read);
+		stream = {};
+		stream.inst_begin = buffer;
+		stream.inst_at = stream.inst_begin;
+		stream.inst_end = stream.inst_begin + bytes_read;
+		Disassemble(&stream);
+		printf("====================================================\n\n");
+
+		const char* listing_38 = "Listings/listing_0038_many_register_mov";
+		printf("====================================================\n");
+		printf("Listing %s\n", listing_38);
+		ReadByteFile(listing_38, buffer, sizeof(buffer), &bytes_read);
+		stream = {};
+		stream.inst_begin = buffer;
+		stream.inst_at = stream.inst_begin;
+		stream.inst_end = stream.inst_begin + bytes_read;
+		Disassemble(&stream);
+		printf("====================================================\n\n");
+	}
+#endif
+
+	// ==========================================================
+	// Listing 39 & 40
+
+	{
+		const char* listing_39 = "Listings/listing_0039_more_movs";
+		printf("====================================================\n");
+		printf("Listing %s\n", listing_39);
+		ReadByteFile(listing_39, buffer, sizeof(buffer), &bytes_read);
+		stream = {};
+		stream.inst_begin = buffer;
+		stream.inst_at = stream.inst_begin;
+		stream.inst_end = stream.inst_begin + bytes_read;
+		Disassemble(&stream);
+		printf("====================================================\n\n");
+
+		const char* listing_40 = "Listings/listing_0040_challenge_movs";
+		printf("====================================================\n");
+		printf("Listing %s\n", listing_40);
+		ReadByteFile(listing_40, buffer, sizeof(buffer), &bytes_read);
+		stream = {};
+		stream.inst_begin = buffer;
+		stream.inst_at = stream.inst_begin;
+		stream.inst_end = stream.inst_begin + bytes_read;
+		Disassemble(&stream);
+		printf("====================================================\n\n");
+	}
 
 	system("pause");
 	return 0;
